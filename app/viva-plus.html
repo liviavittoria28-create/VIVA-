@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#547B62">
+<meta name="description" content="VIVA+ — Tecnologia para viver melhor.">
+<title>VIVA+</title>
+<style>
+:root{--verde:#547B62;--verde-s:#DCE9DD;--creme:#F8F6EF;--azul:#477FA8;--branco:#FFFFFF;--texto:#26352C;--erro:#8A2E2E;--base:18px}
+:root.grande{--base:22px}
+:root.extra{--base:26px}
+:root.contraste{--verde:#1F4A2E;--azul:#0B4F80;--creme:#FFFFFF;--texto:#000000;--verde-s:#E6F2E8}
+*{box-sizing:border-box}
+html{font-size:var(--base)}
+body{margin:0;background:var(--creme);color:var(--texto);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.5;padding-bottom:calc(92px + env(safe-area-inset-bottom));-webkit-text-size-adjust:100%}
+header{position:sticky;top:0;background:var(--verde);color:#fff;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;display:flex;justify-content:space-between;align-items:center;z-index:5}
+header h1{font-size:1.5rem;margin:0}
+header button{background:#fff;color:var(--verde);min-height:44px;margin:0}
+main{padding:16px;max-width:36rem;margin:0 auto}
+h2{font-size:1.4rem;margin:.5rem 0 .75rem}
+h3{font-size:1.1rem;margin:0 0 8px}
+.card{background:var(--branco);border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+label{display:block;font-weight:600;margin:12px 0 6px}
+input,textarea,select{width:100%;font:inherit;font-size:1rem;padding:12px;border:2px solid #9AAE9F;border-radius:10px;background:#fff;color:var(--texto)}
+textarea{min-height:90px;resize:vertical}
+.check{display:flex;align-items:center;gap:10px;font-weight:500;margin-top:12px}
+.check input{width:24px;height:24px;flex:none}
+button,.btn{font:inherit;font-size:1rem;min-height:52px;padding:12px 18px;border:none;border-radius:12px;background:var(--verde);color:#fff;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;margin:4px 6px 4px 0}
+button.sec,.btn.sec{background:#fff;color:var(--verde);border:2px solid var(--verde)}
+button.perigo{background:var(--erro)}
+button.azul{background:var(--azul)}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--azul);outline-offset:2px}
+.item{border-top:1px solid #e3e8e3;padding:12px 0}
+.item:first-of-type{border-top:none}
+.meta{color:#4b5d50;font-size:.95rem}
+.done{text-decoration:line-through;opacity:.65}
+.aviso{background:#FFF6DD;border-left:6px solid #C9962B;padding:12px;border-radius:8px;margin:0 0 14px;font-size:.95rem}
+.msg{padding:12px;border-radius:10px;background:var(--verde-s);margin-bottom:12px;font-weight:600}
+.vazio{color:#4b5d50;font-style:italic;margin:0}
+.row{display:flex;flex-wrap:wrap;align-items:center;margin-top:6px}
+.hora{font-weight:700;color:var(--verde)}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;display:grid;grid-template-columns:repeat(5,1fr);border-top:2px solid var(--verde-s);padding-bottom:env(safe-area-inset-bottom);z-index:5}
+nav button{background:none;color:var(--texto);border-radius:0;flex-direction:column;margin:0;min-height:64px;font-size:.8rem;padding:8px 2px;font-weight:500}
+nav button[aria-current="page"]{color:var(--verde);font-weight:700;background:var(--verde-s)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const KEY = 'viva-plus-v1';
+const $app = document.getElementById('app');
+let db, tela = 'inicio', msg = '', editando = null;
+
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+const hoje = () => ymd(new Date());
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const digitos = s => String(s).replace(/\D/g, '');
+const fmtData = iso => { if (!iso) return ''; const [y, m, d] = iso.split('-'); return d + '/' + m + '/' + y; };
+const ordenarComp = (a, b) => (a.data + a.hora).localeCompare(b.data + b.hora);
+const ativoEm = (r, t) => r.inicio <= t && (!r.fim || t <= r.fim);
+const saudacao = () => { const h = new Date().getHours(); return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'; };
+
+function vazio() {
+  return {
+    perfil: { nome: '' },
+    prefs: { fonte: 'normal', contraste: false },
+    compromissos: [],
+    remedios: [],
+    registrosRemedio: [],
+    contatos: [],
+    pedidosAjuda: [],
+    memorias: []
+  };
+}
+
+function carregar() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    db = raw ? Object.assign(vazio(), JSON.parse(raw)) : vazio();
+  } catch (e) {
+    db = vazio();
+  }
+}
+
+function salvar() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(db));
+  } catch (e) {
+    msg = 'Não foi possível salvar neste aparelho. Verifique o espaço do navegador.';
+  }
+}
+
+function aplicarPrefs() {
+  const el = document.documentElement;
+  el.classList.toggle('grande', db.prefs.fonte === 'grande');
+  el.classList.toggle('extra', db.prefs.fonte === 'extra');
+  el.classList.toggle('contraste', !!db.prefs.contraste);
+}
+
+/* ---------- Telas ---------- */
+
+function itemComp(c) {
+  return `<div class="item">
+    <span class="hora">${esc(c.hora)}</span> <span class="meta">${fmtData(c.data)}</span>
+    <div class="${c.feito ? 'done' : ''}"><strong>${esc(c.titulo)}</strong></div>
+    ${c.notas ? `<div class="meta">${esc(c.notas)}</div>` : ''}
+    ${c.lembrar ? '<div class="meta">Com lembrete</div>' : ''}
+    <div class="row">
+      <button class="${c.feito ? 'sec' : 'azul'}" data-a="feito" data-id="${c.id}">${c.feito ? 'Desmarcar' : 'Marcar como feito'}</button>
+      <button class="sec" data-a="editar" data-id="${c.id}">Editar</button>
+      <button class="perigo" data-a="excluir-comp" data-id="${c.id}">Excluir</button>
+    </div>
+  </div>`;
+}
+
+function telaBoasVindas() {
+  return `<section class="card">
+    <h2>Bem-vindo ao VIVA+</h2>
+    <p>Tecnologia para viver melhor.</p>
+    <form data-f="perfil">
+      <label for="nome">Como você gosta de ser chamado?</label>
+      <input id="nome" name="nome" required maxlength="60" autocomplete="given-name">
+      <div class="row"><button type="submit">Começar</button></div>
+    </form>
+    <p class="meta">Seus dados ficam guardados somente neste aparelho.</p>
+  </section>`;
+}
+
+function telaInicio() {
+  const t = hoje();
+  const comps = db.compromissos.filter(c => c.data === t).sort(ordenarComp);
+  const proximos = db.compromissos.filter(c => c.data > t).sort(ordenarComp).slice(0, 3);
+  const rems = db.remedios.filter(r => ativoEm(r, t));
+  return `
+    <h2>${saudacao()}, ${esc(db.perfil.nome)}</h2>
+    <section class="card">
+      <h3>Hoje</h3>
+      ${comps.length ? comps.map(c => `
+        <div class="item">
+          <span class="hora">${esc(c.hora)}</span>
+          <span class="${c.feito ? 'done' : ''}">${esc(c.titulo)}</span>
+          ${c.lembrar ? '<span class="meta"> (lembrete)</span>' : ''}
+          <div class="row"><button class="${c.feito ? 'sec' : 'azul'}" data-a="feito" data-id="${c.id}">${c.feito ? 'Desmarcar' : 'Marcar como feito'}</button></div>
+        </div>`).join('') : '<p class="vazio">Nenhum compromisso para hoje.</p>'}
+    </section>
+    <section class="card">
+      <h3>Remédios de hoje</h3>
+      <p class="aviso">Aqui fica só o registro do que você informa. O VIVA+ não recomenda remédios nem doses. Siga sempre a orientação do seu médico ou farmacêutico.</p>
+      ${rems.length ? rems.map(r => {
+        const ok = db.registrosRemedio.some(g => g.remedioId === r.id && g.data === t);
+        return `<div class="item">
+          <strong>${esc(r.nome)}</strong> <span class="meta">${esc(r.horarios)}</span>
+          <div class="row"><button class="${ok ? 'sec' : 'azul'}" data-a="tomei" data-id="${r.id}">${ok ? 'Desfazer confirmação' : 'Confirmar que tomei'}</button></div>
+        </div>`;
+      }).join('') : '<p class="vazio">Nenhum remédio cadastrado para hoje.</p>'}
+    </section>
+    <section class="card">
+      <h3>Próximos compromissos</h3>
+      ${proximos.length ? proximos.map(itemComp).join('') : '<p class="vazio">Nenhum compromisso futuro.</p>'}
+    </section>
+    <section class="card">
+      <h3>Ajuda rápida</h3>
+      <div class="row"><button class="perigo" data-a="ir" data-id="ajuda">Preciso de ajuda</button></div>
+    </section>`;
+}
+
+function telaRotina() {
+  const c = editando ? db.compromissos.find(x => x.id === editando) : null;
+  const v = c || { titulo: '', data: hoje(), hora: '09:00', notas: '', lembrar: true };
+  const lista = [...db.compromissos].sort(ordenarComp);
+  return `
+    <h2>Minha rotina</h2>
+    <section class="card">
+      <h3>${c ? 'Editar compromisso' : 'Novo compromisso'}</h3>
+      <form data-f="compromisso">
+        <label for="t">O que é?</label>
+        <input id="t" name="titulo" required maxlength="120" value="${esc(v.titulo)}">
+        <label for="d">Dia</label>
+        <input id="d" type="date" name="data" required value="${esc(v.data)}">
+        <label for="h">Horário</label>
+        <input id="h" type="time" name="hora" required value="${esc(v.hora)}">
+        <label for="n">Observações (opcional)</label>
+        <textarea id="n" name="notas" maxlength="500">${esc(v.notas)}</textarea>
+        <label class="check"><input type="checkbox" name="lembrar" ${v.lembrar ? 'checked' : ''}> Quero ser lembrado neste horário</label>
+        <div class="row">
+          <button type="submit">${c ? 'Salvar alterações' : 'Adicionar'}</button>
+          ${c ? '<button type="button" class="sec" data-a="cancelar">Cancelar</button>' : ''}
+        </div>
+      </form>
+    </section>
+    <section class="card">
+      <h3>Todos os compromissos</h3>
+      ${lista.length ? lista.map(itemComp).join('') : '<p class="vazio">Nenhum compromisso ainda.</p>'}
+    </section>`;
+}
+
+function telaRemedios() {
+  return `
+    <h2>Remédios</h2>
+    <p class="aviso">Cadastre apenas o que você já recebeu do seu médico ou farmacêutico. O VIVA+ não recomenda medicamentos, não define doses e não altera tratamentos.</p>
+    <section class="card">
+      <h3>Novo remédio</h3>
+      <form data-f="remedio">
+        <label for="rn">Nome do remédio</label>
+        <input id="rn" name="nome" required maxlength="120">
+        <label for="rh">Horários, como você recebeu</label>
+        <input id="rh" name="horarios" required maxlength="120" placeholder="Ex.: 8h e 20h">
+        <label for="ri">Data de início</label>
+        <input id="ri" type="date" name="inicio" required value="${hoje()}">
+        <label for="rf">Data final (opcional)</label>
+        <input id="rf" type="date" name="fim">
+        <label for="ro">Observação (opcional)</label>
+        <input id="ro" name="obs" maxlength="200">
+        <div class="row"><button type="submit">Salvar remédio</button></div>
+      </form>
+    </section>
+    <section class="card">
+      <h3>Seus remédios</h3>
+      ${db.remedios.length ? db.remedios.map(r => `
+        <div class="item">
+          <strong>${esc(r.nome)}</strong>
+          <div class="meta">Horários: ${esc(r.horarios)}</div>
+          <div class="meta">De ${fmtData(r.inicio)}${r.fim ? ' até ' + fmtData(r.fim) : ' (sem data final)'}</div>
+          ${r.obs ? `<div class="meta">${esc(r.obs)}</div>` : ''}
+          <div class="row"><button class="perigo" data-a="excluir-remedio" data-id="${r.id}">Excluir</button></div>
+        </div>`).join('') : '<p class="vazio">Nenhum remédio cadastrado.</p>'}
+    </section>`;
+}
+
+function telaAjuda() {
+  const pedidos = [...db.pedidosAjuda].reverse().slice(0, 10);
+  return `
+    <h2>Ajuda</h2>
+    <section class="card">
+      <h3>Contatos de confiança</h3>
+      ${db.contatos.length ? db.contatos.map(c => `
+        <div class="item">
+          <strong>${esc(c.nome)}</strong>
+          <div class="row">
+            <a class="btn" href="tel:${esc(digitos(c.telefone))}">Ligar: ${esc(c.telefone)}</a>
+            <button class="perigo" data-a="excluir-contato" data-id="${c.id}">Remover</button>
+          </div>
+        </div>`).join('') : '<p class="vazio">Nenhum contato cadastrado ainda.</p>'}
+      <form data-f="contato">
+        <label for="cn">Nome</label>
+        <input id="cn" name="nome" required maxlength="120">
+        <label for="ct">Telefone</label>
+        <input id="ct" name="telefone" type="tel" required maxlength="20">
+        <div class="row"><button type="submit">Adicionar contato</button></div>
+      </form>
+    </section>
+    <section class="card">
+      <h3>Emergência (Brasil)</h3>
+      <p class="meta">Em situação de emergência, ligue diretamente. Este aplicativo não faz chamadas nem simula atendimento.</p>
+      <div class="row">
+        <a class="btn" href="tel:192">SAMU 192</a>
+        <a class="btn sec" href="tel:193">Bombeiros 193</a>
+        <a class="btn sec" href="tel:190">Polícia 190</a>
+      </div>
+    </section>
+    <section class="card">
+      <h3>Pedido de ajuda</h3>
+      <p class="meta">Registra um pedido neste aparelho. Ele não avisa seus contatos automaticamente.</p>
+      <div class="row"><button class="perigo" data-a="pedir-ajuda">Registrar pedido de ajuda</button></div>
+      ${pedidos.length ? '<h3 style="margin-top:12px">Últimos pedidos</h3>' + pedidos.map(p =>
+        `<div class="item meta">${new Date(p.criadoEm).toLocaleString('pt-BR')}</div>`).join('') : ''}
+    </section>`;
+}
+
+function telaMemorias() {
+  return `
+    <h2>Minhas memórias</h2>
+    <p class="meta">Por enquanto, as memórias são só texto. Fotos e áudios ainda não estão disponíveis.</p>
+    <section class="card">
+      <h3>Nova memória</h3>
+      <form data-f="memoria">
+        <label for="mt">Título</label>
+        <input id="mt" name="titulo" required maxlength="160">
+        <label for="md">Data (opcional)</label>
+        <input id="md" type="date" name="data">
+        <label for="mh">História</label>
+        <textarea id="mh" name="historia" maxlength="5000"></textarea>
+        <div class="row"><button type="submit">Guardar memória</button></div>
+      </form>
+    </section>
+    <section class="card">
+      <h3>Guardadas</h3>
+      ${db.memorias.length ? [...db.memorias].reverse().map(m => `
+        <div class="item">
+          <strong>${esc(m.titulo)}</strong>
+          ${m.data ? `<div class="meta">${fmtData(m.data)}</div>` : ''}
+          ${m.historia ? `<p>${esc(m.historia).replace(/\n/g, '<br>')}</p>` : ''}
+          <div class="row"><button class="perigo" data-a="excluir-memoria" data-id="${m.id}">Excluir</button></div>
+        </div>`).join('') : '<p class="vazio">Nenhuma memória guardada ainda.</p>'}
+    </section>`;
+}
+
+function telaAjustes() {
+  const f = db.prefs.fonte;
+  return `
+    <h2>Ajustes</h2>
+    <section class="card">
+      <h3>Seu nome</h3>
+      <form data-f="nome-perfil">
+        <label for="an">Como você gosta de ser chamado?</label>
+        <input id="an" name="nome" required maxlength="60" value="${esc(db.perfil.nome)}">
+        <div class="row"><button type="submit">Salvar nome</button></div>
+      </form>
+    </section>
+    <section class="card">
+      <h3>Letra e contraste</h3>
+      <label for="fonte">Tamanho da letra</label>
+      <select id="fonte" data-c="fonte">
+        <option value="normal" ${f === 'normal' ? 'selected' : ''}>Normal</option>
+        <option value="grande" ${f === 'grande' ? 'selected' : ''}>Grande</option>
+        <option value="extra" ${f === 'extra' ? 'selected' : ''}>Extra grande</option>
+      </select>
+      <label class="check"><input type="checkbox" data-c="contraste" ${db.prefs.contraste ? 'checked' : ''}> Alto contraste</label>
+    </section>
+    <section class="card">
+      <h3>Meus dados</h3>
+      <p class="meta">Os dados ficam neste aparelho. Você pode guardar uma cópia em arquivo e restaurá-la depois.</p>
+      <div class="row"><button data-a="exportar">Salvar cópia dos meus dados</button></div>
+      <label for="imp">Restaurar cópia (arquivo .json)</label>
+      <input id="imp" type="file" accept="application/json,.json" data-c="importar">
+    </section>
+    <section class="card">
+      <h3>Apagar tudo</h3>
+      <p class="meta">Remove todos os dados deste aparelho. Não é possível desfazer.</p>
+      <div class="row"><button class="perigo" data-a="apagar">Apagar todos os dados</button></div>
+    </section>
+    <div class="row"><button class="sec" data-a="ir" data-id="inicio">Voltar ao início</button></div>`;
+}
+
+/* ---------- Renderização ---------- */
+
+function render() {
+  aplicarPrefs();
+  const logado = !!db.perfil.nome;
+  let corpo;
+  if (!logado) {
+    corpo = telaBoasVindas();
+  } else {
+    const telas = { inicio: telaInicio, rotina: telaRotina, remedios: telaRemedios, ajuda: telaAjuda, memorias: telaMemorias, ajustes: telaAjustes };
+    corpo = (telas[tela] || telaInicio)();
+  }
+  const abas = [['inicio', 'Início'], ['rotina', 'Rotina'], ['remedios', 'Remédios'], ['ajuda', 'Ajuda'], ['memorias', 'Memórias']];
+  $app.innerHTML = `
+    <header>
+      <h1>VIVA+</h1>
+      ${logado ? '<button class="sec" data-a="ir" data-id="ajustes">Ajustes</button>' : ''}
+    </header>
+    <main>
+      ${msg ? `<div class="msg" role="status">${esc(msg)}</div>` : ''}
+      ${corpo}
+    </main>
+    ${logado ? `<nav aria-label="Navegação principal">
+      ${abas.map(([k, t]) => `<button data-a="ir" data-id="${k}" ${tela === k ? 'aria-current="page"' : ''}>${t}</button>`).join('')}
+    </nav>` : ''}`;
+  msg = '';
+}
+
+/* ---------- Ações ---------- */
+
+function acao(a, id) {
+  switch (a) {
+    case 'ir':
+      tela = id; editando = null; window.scrollTo(0, 0); break;
+    case 'feito': {
+      const c = db.compromissos.find(x => x.id === id);
+      if (c) c.feito = !c.feito;
+      break;
+    }
+    case 'tomei': {
+      const t = hoje();
+      const i = db.registrosRemedio.findIndex(g => g.remedioId === id && g.data === t);
+      if (i >= 0) db.registrosRemedio.splice(i, 1);
+      else db.registrosRemedio.push({ id: uid(), remedioId: id, data: t });
+      break;
+    }
+    case 'editar':
+      editando = id; tela = 'rotina'; window.scrollTo(0, 0); break;
+    case 'cancelar':
+      editando = null; break;
+    case 'excluir-comp':
+      if (!confirm('Excluir este compromisso?')) return;
+      db.compromissos = db.compromissos.filter(x => x.id !== id);
+      editando = null; msg = 'Compromisso excluído.'; break;
+    case 'excluir-remedio':
+      if (!confirm('Excluir este remédio e seus registros?')) return;
+      db.remedios = db.remedios.filter(x => x.id !== id);
+      db.registrosRemedio = db.registrosRemedio.filter(g => g.remedioId !== id);
+      msg = 'Remédio excluído.'; break;
+    case 'excluir-contato':
+      if (!confirm('Remover este contato?')) return;
+      db.contatos = db.contatos.filter(x => x.id !== id);
+      msg = 'Contato removido.'; break;
+    case 'excluir-memoria':
+      if (!confirm('Excluir esta memória?')) return;
+      db.memorias = db.memorias.filter(x => x.id !== id);
+      msg = 'Memória excluída.'; break;
+    case 'pedir-ajuda':
+      if (!confirm('Registrar um pedido de ajuda neste aparelho? Ele não avisa seus contatos automaticamente.')) return;
+      db.pedidosAjuda.push({ id: uid(), criadoEm: new Date().toISOString() });
+      msg = 'Pedido registrado. Se precisar de socorro agora, ligue para seus contatos ou para o número de emergência.';
+      break;
+    case 'exportar': {
+      const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'viva-plus-copia-' + hoje() + '.json';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      msg = 'Cópia gerada.';
+      render();
+      return;
+    }
+    case 'apagar':
+      if (!confirm('Apagar todos os dados deste aparelho? Esta ação não pode ser desfeita.')) return;
+      db = vazio(); tela = 'inicio'; editando = null;
+      msg = 'Dados apagados.'; break;
+    default:
+      return;
+  }
+  salvar();
+  render();
+}
+
+function formulario(f, fd) {
+  const g = k => String(fd.get(k) || '').trim();
+  switch (f) {
+    case 'perfil':
+      if (!g('nome')) { msg = 'Digite seu nome para começar.'; break; }
+      db.perfil.nome = g('nome'); tela = 'inicio'; msg = 'Bem-vindo, ' + db.perfil.nome + '!'; break;
+    case 'nome-perfil':
+      if (!g('nome')) { msg = 'Digite um nome.'; break; }
+      db.perfil.nome = g('nome'); msg = 'Nome salvo.'; break;
+    case 'compromisso': {
+      const dados = { titulo: g('titulo'), data: g('data'), hora: g('hora'), notas: g('notas'), lembrar: fd.get('lembrar') === 'on' };
+      if (!dados.titulo || !dados.data || !dados.hora) { msg = 'Preencha o que é, o dia e o horário.'; break; }
+      if (editando) {
+        const c = db.compromissos.find(x => x.id === editando);
+        if (c) Object.assign(c, dados);
+        editando = null; msg = 'Compromisso atualizado.';
+      } else {
+        db.compromissos.push(Object.assign({ id: uid(), feito: false }, dados));
+        msg = 'Compromisso adicionado.';
+      }
+      break;
+    }
+    case 'remedio':
+      if (!g('nome') || !g('horarios') || !g('inicio')) { msg = 'Preencha nome, horários e data de início.'; break; }
+      if (g('fim') && g('fim') < g('inicio')) { msg = 'A data final não pode ser antes da inicial.'; break; }
+      db.remedios.push({ id: uid(), nome: g('nome'), horarios: g('horarios'), inicio: g('inicio'), fim: g('fim'), obs: g('obs') });
+      msg = 'Remédio salvo.'; break;
+    case 'contato':
+      if (!g('nome') || digitos(g('telefone')).length < 8) { msg = 'Informe o nome e um telefone válido.'; break; }
+      db.contatos.push({ id: uid(), nome: g('nome'), telefone: g('telefone') });
+      msg = 'Contato adicionado.'; break;
+    case 'memoria':
+      if (!g('titulo')) { msg = 'Dê um título para a memória.'; break; }
+      db.memorias.push({ id: uid(), titulo: g('titulo'), data: g('data'), historia: g('historia') });
+      msg = 'Memória guardada.'; break;
+    default:
+      return;
+  }
+  salvar();
+  render();
+}
+
+/* ---------- Eventos ---------- */
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-a]');
+  if (b) acao(b.dataset.a, b.dataset.id);
+});
+
+document.addEventListener('submit', e => {
+  e.preventDefault();
+  const f = e.target;
+  if (f.dataset.f) formulario(f.dataset.f, new FormData(f));
+});
+
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.dataset.c === 'fonte') {
+    db.prefs.fonte = t.value; salvar(); render();
+  } else if (t.dataset.c === 'contraste') {
+    db.prefs.contraste = t.checked; salvar(); render();
+  } else if (t.dataset.c === 'importar' && t.files[0]) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const d = JSON.parse(reader.result);
+        if (!d || typeof d !== 'object' || !d.perfil) throw new Error('formato');
+        db = Object.assign(vazio(), d);
+        salvar();
+        msg = 'Cópia restaurada.';
+      } catch (err) {
+        msg = 'Arquivo inválido. Escolha uma cópia salva pelo VIVA+.';
+      }
+      render();
+    };
+    reader.readAsText(t.files[0]);
+  }
+});
+
+carregar();
+render();
+</script>
+</body>
+</html>

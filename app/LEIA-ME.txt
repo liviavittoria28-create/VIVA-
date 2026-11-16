@@ -1,0 +1,23 @@
+VIVA+ — versão para celular (sem instalação)
+
+COMO ABRIR
+1. Copie o arquivo viva-plus.html para o celular (WhatsApp, e-mail ou Google Drive).
+2. Toque no arquivo. Ele abre no navegador (Chrome ou Safari).
+3. Para deixar na tela inicial: no menu do navegador, escolha "Adicionar à tela inicial".
+
+DADOS
+- Tudo fica guardado somente neste aparelho e neste navegador (localStorage).
+- Em Ajustes > Meus dados você pode salvar uma cópia em arquivo e restaurá-la depois.
+- Limpar os dados do navegador apaga o VIVA+ deste aparelho. Faça cópias.
+
+O QUE FUNCIONA
+- Início, Rotina (compromissos com lembrete visual), Remédios (apenas registro do que você informa),
+  Ajuda (contatos de confiança, ligação, pedido registrado), Memórias (texto),
+  Ajustes (nome, tamanho da letra, alto contraste, cópia e restauração, apagar tudo).
+
+LIMITAÇÕES DESTA VERSÃO
+- Não há família, login, nem sincronização. Isso virá com o Supabase.
+- Os lembretes aparecem dentro do app; não há notificações do celular.
+- Memórias sem fotos e áudios.
+- Pedido de ajuda não envia aviso aos contatos.
+- O VIVA+ não recomenda remédios nem substitui serviços de emergência.
