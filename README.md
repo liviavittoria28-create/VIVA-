@@ -4,6 +4,8 @@
 
 Plataforma de autonomia, organização cotidiana e conexão familiar para pessoas idosas, familiares e cuidadores autorizados.
 
+<img src="docs/screenshots/inicio.jpg" alt="Tela inicial do app VIVA+ no celular" width="300">
+
 ## Estado atual
 
 | Fase | Descrição | Status |
@@ -65,3 +67,7 @@ Nenhum teste automatizado foi executado até o momento. Ver [docs/16-PLANO-DE-TE
 ## Licença
 
 A definir pelo titular do projeto.
+
+## Autora
+
+Desenvolvido por **Lívia Vittoria** · [GitHub](https://github.com/liviavittoria28-create)
